@@ -1,0 +1,7 @@
+{
+  "name": "Hexed",
+  "icon": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" width=\"100%\" height=\"100%\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\"><path d=\"M12 2 21 7v10l-9 5-9-5V7z\"/><path d=\"M9 15V9m6 6V9m-6 3h6\"/></svg>",
+  "active-icon": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" width=\"100%\" height=\"100%\"><path fill=\"currentColor\" d=\"M12 2 21 7v10l-9 5-9-5V7z\"/><path d=\"M9 15V9m6 6V9m-6 3h6\" stroke=\"#000\" stroke-width=\"2\"/></svg>",
+  "subfiles": ["core.js", "store.js"],
+  "subfiles_extension": ["core.js", "store.js", "extension.js"]
+}

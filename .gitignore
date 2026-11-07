@@ -1,0 +1,6 @@
+# Logs (LocalPresence's helper writes one)
+*.log
+
+# Windows
+Thumbs.db
+desktop.ini
