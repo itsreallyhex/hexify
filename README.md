@@ -4,9 +4,9 @@ Hex's Spotify extensions: little add-ons I made for my own Spotify. They run thr
 app.
 
 I built these for myself, around how I listen: lots of local files (mostly unreleased Juice WRLD), a Discord status I
-care about, and a PC I'd like Spotify to go easy on. You're welcome to look around or borrow ideas, but they're not
-made for general use and I don't support them. They're tested on Spotify 1.3.8 with Spicetify 2.46.4, and a Spotify
-update can break any of them.
+care about, and a PC I'd like Spotify to go easy on. You're free to use them, change them or borrow ideas, but
+updates follow what I want, not requests. They're tested on Spotify 1.3.8 with Spicetify 2.46.4, and a Spotify update
+can break any of them.
 
 ## What's in here
 
@@ -25,3 +25,7 @@ update can break any of them.
 
 You need [Spicetify](https://spicetify.app) installed first. Each extension's README has its own install steps, so
 you can take just the ones you want. `spicetify apply` restarts Spotify, so your music stops for a few seconds.
+
+## License
+
+MIT. See [LICENSE](LICENSE).
