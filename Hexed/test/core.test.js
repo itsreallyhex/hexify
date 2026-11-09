@@ -3,6 +3,20 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const C = require("../core.js");
 
+test("calendarDays gives every date once across clock changes and stops before end", () => {
+  const tz = process.env.TZ;
+  process.env.TZ = "America/New_York";
+  try {
+    const days = C.calendarDays(new Date(2025, 9, 30, 15).getTime(), new Date(2026, 2, 10).getTime()).map(C.dayStr);
+    assert.equal(days[0], "2025-10-30");
+    assert.equal(days[days.length - 1], "2026-03-09");
+    assert.equal(days.length, 131);
+    assert.equal(new Set(days).size, days.length);
+  } finally {
+    if (tz === undefined) delete process.env.TZ; else process.env.TZ = tz;
+  }
+});
+
 const ext = (ts, ms, uri, n = "Song", a = "Artist") => ({ ts, ms_played: ms, spotify_track_uri: uri, master_metadata_track_name: n, master_metadata_album_artist_name: a, master_metadata_album_album_name: "Album", ip_addr: "0.0.0.0" });
 
 test("parses extended history, drops podcasts and private fields", () => {

@@ -112,6 +112,7 @@ function HexedApp() {
   const [showAll, setShowAll] = R.useState(false);
   const [hero, setHero] = R.useState(null); // { photo, cover, artist }
   const [accent, setAccent] = R.useState(null);
+  const [hover, setHover] = R.useState(null); // index of the graph point under the mouse
   const fileRef = R.useRef(null);
 
   const load = () => HexedStore.all().then(setRecs).catch(e => setMsg("Couldn't read your data: " + e.message));
@@ -198,20 +199,43 @@ function HexedApp() {
 
   function Activity() {
     const start = Number.isFinite(from) ? from : st.first, end = Math.min(Number.isFinite(to) ? to : now, now);
-    const pts = [];
-    for (let t = new Date(new Date(start).toDateString()).getTime(); t <= end; t += DAY) pts.push([t, st.days.get(HexedCore.dayStr(t)) || 0]);
+    const pts = HexedCore.calendarDays(start, end).map(t => [t, st.days.get(HexedCore.dayStr(t)) || 0]);
     let series = pts;
     if (pts.length > 180) { series = []; for (let i = 0; i < pts.length; i += 7) series.push([pts[i][0], pts.slice(i, i + 7).reduce((s, p) => s + p[1], 0)]); }
     const W = 600, H = 120, max = Math.max(1, ...series.map(p => p[1]));
     const x = i => (series.length < 2 ? W / 2 : (i / (series.length - 1)) * W), yv = v => H - (v / max) * (H - 8);
     const line = series.map((p, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${yv(p[1]).toFixed(1)}`).join("");
-    const dayLabel = t => new Date(t).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+    const dates = t => new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", ...(new Date(t).getFullYear() !== y && { year: "numeric" }) });
+    const dayLabel = t => dates(t).format(t);
+    const pick = i => setHover(Math.max(0, Math.min(series.length - 1, i)));
+    const graphEvents = {
+      onMouseMove: e => { const b = e.currentTarget.getBoundingClientRect(); pick(Math.round(((e.clientX - b.left) / b.width) * (series.length - 1))); },
+      onMouseLeave: () => setHover(null),
+      onBlur: () => setHover(null),
+      onKeyDown: e => { const d = { ArrowLeft: -1, ArrowRight: 1 }[e.key]; if (d) { e.preventDefault(); pick(hover === null ? series.length - 1 : hover + d); } },
+    };
+    const p = series[hover];
+    let marker = null;
+    if (p) {
+      const left = (x(hover) / W) * 100, lastDay = series === pts ? p[0] : pts[Math.min(hover * 7 + 6, pts.length - 1)][0];
+      const s = HexedCore.stats(recs, Math.max(p[0], from), series[hover + 1]?.[0] ?? to, 1), topSong = s.topSongs[0], topArt = s.topArtists[0];
+      marker = h(R.Fragment, null,
+        h("span", { className: "hx-cross", style: { left: left + "%" } }),
+        h("span", { className: "hx-dot", style: { left: left + "%", top: (yv(p[1]) / H) * 100 + "%" } }),
+        h("div", { className: "hx-tip", role: "status", style: left > 50 ? { right: `calc(${100 - left}% + 12px)` } : { left: `calc(${left}% + 12px)` } },
+          h("b", null, dates(p[0]).formatRange(p[0], lastDay)),
+          h("div", null, `${mins(p[1])} min · ${playsTxt(s.plays)}`),
+          topSong && h("div", null, h("span", { className: "hx-muted" }, "Top song "), topSong.n),
+          topArt && h("div", null, h("span", { className: "hx-muted" }, "Top artist "), topArt.a)));
+    }
     return h("div", { className: "hx-card hx-wide" },
       h("div", { className: "hx-card-title" }, series === pts ? "Daily listening" : "Weekly listening", st.bestDay && h("span", { className: "hx-muted" }, ` · peak ${mins(st.bestDay.ms)} min on ${dayLabel(Date.parse(st.bestDay.day + "T12:00"))}`)),
-      h("svg", { viewBox: `0 0 ${W} ${H}`, preserveAspectRatio: "none", className: "hx-area", role: "img", "aria-label": "Listening per day" },
-        h("defs", null, h("linearGradient", { id: "hxg", x1: 0, x2: 0, y1: 0, y2: 1 }, h("stop", { offset: "0%", stopColor: "var(--hx-accent)", stopOpacity: 0.45 }), h("stop", { offset: "100%", stopColor: "var(--hx-accent)", stopOpacity: 0 }))),
-        series.length > 1 && h("path", { d: `${line}L${W},${H}L0,${H}Z`, fill: "url(#hxg)" }),
-        h("path", { d: line, fill: "none", stroke: "var(--hx-accent)", strokeWidth: 2, vectorEffect: "non-scaling-stroke" })),
+      h("div", { className: "hx-graph", role: "group", tabIndex: 0, "aria-label": "Listening graph. Left and right arrows show each point.", ...graphEvents },
+        h("svg", { viewBox: `0 0 ${W} ${H}`, preserveAspectRatio: "none", className: "hx-area", role: "img", "aria-label": "Listening per day" },
+          h("defs", null, h("linearGradient", { id: "hxg", x1: 0, x2: 0, y1: 0, y2: 1 }, h("stop", { offset: "0%", stopColor: "var(--hx-accent)", stopOpacity: 0.45 }), h("stop", { offset: "100%", stopColor: "var(--hx-accent)", stopOpacity: 0 }))),
+          series.length > 1 && h("path", { d: `${line}L${W},${H}L0,${H}Z`, fill: "url(#hxg)" }),
+          h("path", { d: line, fill: "none", stroke: "var(--hx-accent)", strokeWidth: 2, vectorEffect: "non-scaling-stroke" })),
+        marker),
       h("div", { className: "hx-axis" }, h("span", null, dayLabel(series[0]?.[0] ?? now)), h("span", null, dayLabel(series[series.length - 1]?.[0] ?? now))));
   }
 
@@ -335,6 +359,12 @@ var HEXED_CSS = `
 .hx-delta.up{background:color-mix(in srgb,var(--hx-accent) 22%,transparent);color:var(--hx-accent)}
 .hx-delta.down{background:rgba(255,255,255,.08);color:var(--spice-subtext)}
 .hx-area{width:100%;height:120px;display:block}
+.hx-graph{position:relative;cursor:crosshair}
+.hx-cross{position:absolute;top:0;bottom:0;width:1px;background:var(--hx-accent);opacity:.5;pointer-events:none}
+.hx-dot{position:absolute;width:9px;height:9px;border-radius:50%;background:var(--hx-accent);box-shadow:0 0 0 2px rgba(0,0,0,.5);transform:translate(-50%,-50%);pointer-events:none}
+.hx-tip{position:absolute;top:0;max-width:260px;padding:8px 12px;border:1px solid var(--hx-line);border-radius:10px;background:rgba(0,0,0,.85);font-size:12px;line-height:1.5;pointer-events:none;z-index:2}
+.hx-tip div{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hx-tip .hx-muted{font-size:12px}
 .hx-axis{display:flex;justify-content:space-between;color:var(--spice-subtext);font-size:11px;margin-top:4px}
 .hx-song{display:flex;gap:18px;align-items:center}
 .hx-song .hx-art{width:124px;height:124px;border-radius:12px;flex:none}

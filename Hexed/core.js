@@ -85,6 +85,13 @@ var HexedCore = globalThis.HexedCore = (() => {
 
   const dayStr = t => { const d = new Date(t); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
 
+  // Local midnights from start's day until end. Steps by calendar, because a clock change makes a day 23 or 25 hours.
+  function calendarDays(start, end) {
+    const d = new Date(start), out = [];
+    for (let i = 0, t; (t = new Date(d.getFullYear(), d.getMonth(), d.getDate() + i).getTime()) < end; i++) out.push(t);
+    return out;
+  }
+
   // Stats for records whose start is in [from, to). Times are local.
   function stats(records, from = -Infinity, to = Infinity, top = 50) {
     const key = keyer(records);
@@ -192,6 +199,6 @@ var HexedCore = globalThis.HexedCore = (() => {
     return best;
   }
 
-  return { PLAY_MS, isPlay, shouldResume, nameKey, parseExport, merge, counts, stats, prevRange, delta, newArtists, insights, longestStreak, dayStr };
+  return { PLAY_MS, isPlay, shouldResume, nameKey, parseExport, merge, counts, stats, prevRange, delta, newArtists, insights, longestStreak, dayStr, calendarDays };
 })();
 if (typeof module !== "undefined") module.exports = HexedCore;

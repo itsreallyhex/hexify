@@ -15,7 +15,8 @@ counts every play itself and turns it into a page I can check whenever I feel li
   dates, and you get:
   - your top artist, songs and albums, with covers
   - minutes, plays and how that compares to the period before
-  - a chart of each day and a heatmap of when you listen
+  - a chart of your listening, where moving along it shows the minutes, plays, top song and top artist for that day or week
+  - a heatmap of when you listen
   - a few plain-words insights, like "Night owl: 97% of your listening is between 10 PM and 5 AM"
 - Imports your full Spotify history, so your stats go back years and include plays from your phone.
 - **Back up** saves everything to a file you can import again after reinstalling.
