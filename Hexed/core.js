@@ -51,15 +51,18 @@ var HexedCore = globalThis.HexedCore = (() => {
     let base = existing;
     if (incoming.some(r => r.src === "extended")) base = existing.filter(r => r.src !== "account");
     const key = keyer(base.concat(incoming));
-    const starts = new Map(); // song key -> sorted start times already present
-    for (const r of base) { const k = key(r); (starts.get(k) || starts.set(k, []).get(k)).push(r.s); }
-    for (const arr of starts.values()) arr.sort((x, y) => x - y);
+    const starts = new Map(); // song key -> { source: sorted start times already present }
+    const times = (k, src) => ((starts.get(k) || starts.set(k, {}).get(k))[src] ||= []);
+    for (const r of base) times(key(r), r.src).push(r.s);
+    for (const bySrc of starts.values()) for (const arr of Object.values(bySrc)) arr.sort((x, y) => x - y);
     const added = [];
     let skipped = 0;
     for (const r of incoming) {
-      const k = key(r), arr = starts.get(k) || starts.set(k, []).get(k);
-      if (hasNear(arr, r.s)) { skipped++; continue; }
-      insertSorted(arr, r.s);
+      const k = key(r);
+      // One source can loop a short song within DUP_MS, so only its exact start is a repeat.
+      // shortcut: a loop only half covered by another source loses a play near the overlap, upgrade by pairing streams one to one.
+      if (Object.entries(starts.get(k) || {}).some(([src, arr]) => hasNear(arr, r.s, src === r.src ? 1 : DUP_MS))) { skipped++; continue; }
+      insertSorted(times(k, r.src), r.s);
       added.push(r);
     }
     return { merged: base.concat(added), added: added.length, skipped, dropped: existing.length - base.length };
@@ -70,9 +73,9 @@ var HexedCore = globalThis.HexedCore = (() => {
     while (lo < hi) { const m = (lo + hi) >> 1; sorted[m] < t ? (lo = m + 1) : (hi = m); }
     return lo;
   }
-  function hasNear(sorted, t) {
+  function hasNear(sorted, t, within) {
     const i = lowerBound(sorted, t);
-    return (i < sorted.length && sorted[i] - t < DUP_MS) || (i > 0 && t - sorted[i - 1] < DUP_MS);
+    return (i < sorted.length && sorted[i] - t < within) || (i > 0 && t - sorted[i - 1] < within);
   }
   const insertSorted = (sorted, t) => sorted.splice(lowerBound(sorted, t), 0, t);
 
@@ -102,8 +105,8 @@ var HexedCore = globalThis.HexedCore = (() => {
     let ms = 0, plays = 0, skips = 0, first = Infinity, last = -Infinity;
     for (const r of records) {
       if (r.s < from || r.s >= to) continue;
-      ms += r.ms;
       if (!isPlay(r)) { skips++; continue; }
+      ms += r.ms;
       plays++;
       if (r.s < first) first = r.s;
       if (r.s > last) last = r.s;
@@ -153,7 +156,8 @@ var HexedCore = globalThis.HexedCore = (() => {
   }
 
   const WEEKDAYS = ["Sundays", "Mondays", "Tuesdays", "Wednesdays", "Thursdays", "Fridays", "Saturdays"];
-  const fmtDay = d => new Date(d + "T12:00:00").toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  const dateOpts = t => ({ month: "short", day: "numeric", ...(new Date(t).getFullYear() !== new Date().getFullYear() && { year: "numeric" }) });
+  const fmtDay = d => { const t = new Date(d + "T12:00:00"); return t.toLocaleDateString(undefined, dateOpts(t)); };
 
   // Plain-English observations, strongest first. `prev` = stats for the previous window (or null).
   function insights(st, prev, fresh, label = "the period before") {
@@ -199,6 +203,6 @@ var HexedCore = globalThis.HexedCore = (() => {
     return best;
   }
 
-  return { PLAY_MS, isPlay, shouldResume, nameKey, parseExport, merge, counts, stats, prevRange, delta, newArtists, insights, longestStreak, dayStr, calendarDays };
+  return { PLAY_MS, isPlay, shouldResume, nameKey, parseExport, merge, counts, stats, prevRange, delta, newArtists, insights, longestStreak, dayStr, calendarDays, dateOpts };
 })();
 if (typeof module !== "undefined") module.exports = HexedCore;

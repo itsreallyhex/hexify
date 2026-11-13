@@ -11,7 +11,7 @@ const net = require("net");
 const PORT = 47999;
 const ORIGIN = "https://xpui.app.spotify.com"; // the Spotify page; any other page is refused
 const CLIENT_ID = process.env.NINE_DISCORD_ID || "1548116060031680664"; // 999 Vault's app (presence.rs DEFAULT_ID)
-const CATALOGUE = "D:\\Random coding\\juiceapi\\web\\data\\catalogue.json";
+const CATALOGUE = require("path").join(__dirname, "..", "..", "..", "juiceapi", "web", "data", "catalogue.json"); // 999 Vault's repo, next to this one
 const COVER_CDN = "https://api.juicevault.xyz/cdn/music/covers/";
 // The small round picture on the cover's corner, Juice WRLD songs only: Art Assets in 999 Vault's Discord app
 // (Developer Portal > Rich Presence > Art Assets), by direct URL: Discord caches an app's asset names per session, so

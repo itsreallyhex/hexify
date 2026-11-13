@@ -52,6 +52,25 @@ test("30s rule: plays vs skips", () => {
   const s = C.stats([{ s: 0, ms: 29999, u: "x", n: "S", a: "A", al: "" }, { s: 1, ms: 30000, u: "x", n: "S", a: "A", al: "" }]);
   assert.equal(s.plays, 1);
   assert.equal(s.skips, 1);
+  assert.equal(s.ms, 30000); // minutes leave skips out, like every other total
+});
+
+test("merge: a short song on repeat keeps every play, and re-importing adds nothing", () => {
+  const rows = [0, 1, 2, 3, 4].map(i => ({ s: 1e12 + i * 90000, ms: 90000, u: "spotify:track:A", n: "Song", a: "Artist", al: "", src: "extended" }));
+  const m = C.merge([], rows);
+  assert.equal(m.added, 5);
+  assert.equal(C.merge(m.merged, rows).added, 0);
+});
+
+test("insights show the year only for other years", () => {
+  const y = new Date().getFullYear();
+  const say = year => {
+    const t = Date.parse(`${year}-03-06T15:00:00`);
+    const recs = Array.from({ length: 12 }, (_, i) => ({ s: t + i * 1000, ms: 60000, u: "x", n: "Hypnotic", a: "Juice WRLD", al: "", src: "live" }));
+    return C.insights(C.stats(recs), null, null).find(l => l.includes("times on"));
+  };
+  assert.ok(say(y - 1).includes(String(y - 1)));
+  assert.ok(!say(y).includes(String(y)));
 });
 
 test("merge: same stream from live tracker and history import counts once", () => {

@@ -103,6 +103,8 @@ function HexedArt({ uri, kind, override }) {
     R.createElement("svg", { viewBox: "0 0 24 24", fill: "currentColor", "aria-hidden": true }, R.createElement("path", { d: "M9 18V6l11-2v12M9 18a3 3 0 1 1-3-3 3 3 0 0 1 3 3Zm11-2a3 3 0 1 1-3-3 3 3 0 0 1 3 3Z", fill: "none", stroke: "currentColor", strokeWidth: 1.8 })));
 }
 
+var BACKUP_KEY = "hexed:lastBackup";
+
 function HexedApp() {
   const R = Spicetify.React, h = R.createElement;
   const [recs, setRecs] = R.useState(null);
@@ -179,8 +181,12 @@ function HexedApp() {
     const a = Object.assign(document.createElement("a"), { href: URL.createObjectURL(blob), download: `hexed-backup-${HexedCore.dayStr(Date.now())}.json` });
     a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+    Spicetify.LocalStorage.set(BACKUP_KEY, String(Date.now()));
     setMsg("Backup saved to your Downloads. Load it with Import if you ever reinstall Spotify.");
   }
+
+  const backedUp = Number(Spicetify.LocalStorage.get(BACKUP_KEY)) || 0, backupDays = Math.floor((now - backedUp) / DAY);
+  const backupTxt = !backedUp ? "no backup yet" : backupDays < 1 ? "backed up today" : `last backup ${backupDays} day${backupDays === 1 ? "" : "s"} ago`;
 
   // ---- small pieces ----
   const fmt = n => (n >= 10000 ? new Intl.NumberFormat(undefined, { notation: "compact", maximumFractionDigits: 1 }).format(n) : Math.round(n).toLocaleString());
@@ -205,7 +211,7 @@ function HexedApp() {
     const W = 600, H = 120, max = Math.max(1, ...series.map(p => p[1]));
     const x = i => (series.length < 2 ? W / 2 : (i / (series.length - 1)) * W), yv = v => H - (v / max) * (H - 8);
     const line = series.map((p, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${yv(p[1]).toFixed(1)}`).join("");
-    const dates = t => new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", ...(new Date(t).getFullYear() !== y && { year: "numeric" }) });
+    const dates = t => new Intl.DateTimeFormat(undefined, HexedCore.dateOpts(t));
     const dayLabel = t => dates(t).format(t);
     const pick = i => setHover(Math.max(0, Math.min(series.length - 1, i)));
     const graphEvents = {
@@ -229,7 +235,7 @@ function HexedApp() {
           topArt && h("div", null, h("span", { className: "hx-muted" }, "Top artist "), topArt.a)));
     }
     return h("div", { className: "hx-card hx-wide" },
-      h("div", { className: "hx-card-title" }, series === pts ? "Daily listening" : "Weekly listening", st.bestDay && h("span", { className: "hx-muted" }, ` · peak ${mins(st.bestDay.ms)} min on ${dayLabel(Date.parse(st.bestDay.day + "T12:00"))}`)),
+      h("div", { className: "hx-card-title" }, series === pts ? "Daily listening" : "Weekly listening", st.bestDay && h("span", { className: "hx-muted" }, ` · best day ${mins(st.bestDay.ms)} min on ${dayLabel(Date.parse(st.bestDay.day + "T12:00"))}`)),
       h("div", { className: "hx-graph", role: "group", tabIndex: 0, "aria-label": "Listening graph. Left and right arrows show each point.", ...graphEvents },
         h("svg", { viewBox: `0 0 ${W} ${H}`, preserveAspectRatio: "none", className: "hx-area", role: "img", "aria-label": "Listening per day" },
           h("defs", null, h("linearGradient", { id: "hxg", x1: 0, x2: 0, y1: 0, y2: 1 }, h("stop", { offset: "0%", stopColor: "var(--hx-accent)", stopOpacity: 0.45 }), h("stop", { offset: "100%", stopColor: "var(--hx-accent)", stopOpacity: 0 }))),
@@ -321,7 +327,7 @@ function HexedApp() {
       chips),
     body,
     h("details", { className: "hx-data" },
-      h("summary", null, `Your data · ${recs ? fmt(recs.length) : "…"} streams saved on this PC`),
+      h("summary", null, `Your data · ${recs ? fmt(recs.length) : "…"} streams saved on this PC · ${backupTxt}`),
       h("p", { className: "hx-muted" }, "Import your Spotify history: unzip the email from Spotify and pick every Streaming_History_Audio_*.json (or StreamingHistory_music_*.json) file. Hexed backups load the same way. Importing twice never double counts."),
       h("input", { ref: fileRef, type: "file", accept: ".json", multiple: true, hidden: true, onChange: onImport }),
       h("button", { className: "hx-btn", onClick: () => fileRef.current.click() }, "Import"),

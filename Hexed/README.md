@@ -19,7 +19,8 @@ counts every play itself and turns it into a page I can check whenever I feel li
   - a heatmap of when you listen
   - a few plain-words insights, like "Night owl: 97% of your listening is between 10 PM and 5 AM"
 - Imports your full Spotify history, so your stats go back years and include plays from your phone.
-- **Back up** saves everything to a file you can import again after reinstalling.
+- **Back up** saves everything to a file you can import again after reinstalling, and the page shows how long it's been
+  since your last one.
 
 ## Install
 

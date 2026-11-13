@@ -58,7 +58,7 @@
     const fk = Object.keys(row).find(k => k.startsWith("__reactFiber"));
     for (let f = fk && row[fk], i = 0; f && i < 6; f = f.return, i++) {
       const u = f.memoizedProps?.uri;
-      if (typeof u === "string" && u.startsWith("spotify:track:")) return u;
+      if (typeof u === "string" && /^spotify:(track|local):/.test(u)) return u;
     }
     return null;
   }
