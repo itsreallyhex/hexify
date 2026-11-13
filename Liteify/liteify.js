@@ -1,6 +1,6 @@
 // Liteify: a lighter Spotify.
 // Lite mode (leaf button, green = on): no blur, no Canvas/videos, no looping animations.
-// Away mode (automatic): the same while Spotify is unfocused, plus animated canvases hidden.
+// Away mode (automatic): the same once Spotify has been out of sight for 3 minutes, plus animated canvases hidden.
 // Measured on Spotify 1.3.8: this saves CPU, not RAM. The big RAM win is Spotify's own
 // "hardware acceleration" setting OFF (1.39 GB -> 0.99 GB); lite mode keeps that setting smooth,
 // because blur and animations are the expensive parts to draw without the GPU.
@@ -22,12 +22,18 @@
   `;
   document.head.append(style);
 
-  // Away mode: on a second monitor Spotify keeps animating while you're in another window.
-  // Go lite while unfocused, restore on focus. Nothing unmounts, so coming back is instant.
+  // Away mode: only when Spotify is out of sight (minimized or fully covered) for AWAY_MS. While it is on screen it is
+  // left alone, focused or not (Hex's choice). Nothing unmounts, so coming back is instant.
+  const AWAY_MS = 3 * 60000;
+  let awayTimer;
   const away = on => root.classList.toggle("liteify-away", on);
-  window.addEventListener("blur", () => away(true));
-  window.addEventListener("focus", () => away(false));
-  away(!document.hasFocus());
+  const onVisibility = () => {
+    clearTimeout(awayTimer);
+    if (document.hidden) awayTimer = setTimeout(() => away(true), AWAY_MS);
+    else away(false);
+  };
+  document.addEventListener("visibilitychange", onVisibility);
+  onVisibility();
 
   const KEY = "liteify:lite";
   // leaf; explicit width/height or Spotify renders it tiny

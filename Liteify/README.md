@@ -11,8 +11,9 @@ was looking at. Liteify stops that.
 
 - Adds a leaf button to the player bar. While it's green (lite mode, on by default), Spotify skips the see-through
   blur, Canvas videos and looping animations.
-- Goes lite on its own whenever you click away from Spotify, and hides animated backgrounds like Spicy Lyrics'. Click
-  back in and everything is there again instantly.
+- Goes lite on its own once Spotify has been out of sight (minimized or covered) for 3 minutes, and hides animated
+  backgrounds like Spicy Lyrics'. While you can see Spotify it's left alone, even if you're not clicked into it. Bring
+  it back and everything is there again instantly.
 - Never touches your music or your Discord status.
 
 ## Install
