@@ -3,6 +3,8 @@
 My own Spotify look: the song's cover glows behind see-through panels, and the song shows up on my desktop with its
 lyrics.
 
+![Hexglass in Spotify: a playlist over the playing song's blurred cover, with see-through panels and lyrics on the right](preview-spotify.png)
+
 ![Hexglass Desktop: the playing song's blurred cover filling the desktop, the cover, title and artist on the left, and the lyrics scrolling on the right with the current line lit up](preview.png)
 
 I wanted Spotify to look like whatever song is playing, and I wanted to glance at my desktop and see the song and
