@@ -147,6 +147,23 @@ function main() {
   let heard = 0;
   let alive = 0; // open /alive connections from Spotify
 
+  // Hexglass Desktop (desktop.js): the Spotify page posts the song here, the app listens on /desktop/events.
+  const desktop = require("./desktop").start();
+  const DESK_ROUTES = { "/desktop/song": "song", "/desktop/state": "state" };
+  // The app opens with Spotify and quits once Spotify has been gone this long (a reload reconnects within seconds).
+  const DESK_EXE = require("path").join(__dirname, "..", "..", "Hexglass", "Desktop", "bin", "publish", "HexglassDesktop.exe");
+  const DESK_GRACE_MS = 15000;
+  const deskQuitLater = () => setTimeout(() => { if (!alive) { log("hexglass desktop: quit"); desktop.quit(); } }, DESK_GRACE_MS);
+  let deskQuit = deskQuitLater(); // the helper (re)started without Spotify: an app still running goes too
+  function deskOpen() {
+    clearTimeout(deskQuit);
+    desktop.open();
+    if (!fs.existsSync(DESK_EXE)) return;
+    // A copy already running exits by itself (single-instance mutex), so starting it again is harmless.
+    require("child_process").spawn(DESK_EXE, [], { detached: true, stdio: "ignore" })
+      .on("error", e => log("hexglass desktop did not start:", e.message)).unref();
+  }
+
   function connect(i = 0) {
     if (i > 9) { failedAt = Date.now(); log("discord not running"); return; }
     const s = net.connect(`\\\\?\\pipe\\discord-ipc-${i}`);
@@ -186,25 +203,34 @@ function main() {
   };
   const server = http.createServer((req, res) => {
     const end = code => { res.writeHead(code, cors); res.end(); };
+    // The app is a local program, not a page: browsers always send an Origin, so a request without one is no website.
+    if (req.method === "GET" && req.url === "/desktop/events" && !req.headers.origin) return desktop.connect(req, res);
     if (req.headers.origin !== ORIGIN) { res.writeHead(403); return res.end(); }
     if (req.method === "OPTIONS") return end(204);
     if (req.method === "GET" && req.url === "/alive") {
       res.writeHead(200, { ...cors, "Content-Type": "text/event-stream", "Cache-Control": "no-cache" });
       res.write(": open\n\n");
-      alive++;
+      if (++alive === 1) deskOpen();
       log(`alive open (${alive})`);
       req.on("close", () => {
         log(`alive closed (${alive - 1})`);
-        if (--alive === 0 && want) { log("spotify gone"); want = null; push(); }
+        if (--alive === 0) {
+          desktop.clear(); // the app hides, your own wallpaper shows
+          deskQuit = deskQuitLater();
+          if (want) { log("spotify gone"); want = null; push(); }
+        }
       });
       return;
     }
-    if (req.method !== "POST" || req.url !== "/presence") return end(404);
+    const desk = DESK_ROUTES[req.url];
+    if (req.method !== "POST" || (req.url !== "/presence" && !desk)) return end(404);
+    const limit = desk ? 2e6 : 20000; // the song post carries its cover
     let body = "";
-    req.on("data", c => { body += c; if (body.length > 20000) req.destroy(); });
+    req.on("data", c => { body += c; if (body.length > limit) req.destroy(); });
     req.on("end", () => {
       let s;
       try { s = JSON.parse(body); } catch { return end(400); }
+      if (desk) return end(desktop[desk](s) === false ? 404 : 204); // 404: song unknown, Spotify sends it again
       heard = Date.now();
       const was = want;
       want = activity(s, songs());

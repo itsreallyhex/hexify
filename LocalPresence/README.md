@@ -60,5 +60,7 @@ You need [Node.js](https://nodejs.org) and the Discord desktop app.
 - `localpresence.js` is the Spotify extension: local or not, private session, finding a cover.
 - `helper/helper.js` is the helper (Node, no packages). It takes the status from Spotify on `127.0.0.1:47999`, only
   from the Spotify page, and passes it to Discord. It writes what it does to `helper/helper.log`.
+- `helper/desktop.js` also passes the playing song on to [Hexglass Desktop](../Hexglass/README.md), the app that
+  shows it behind the desktop icons.
 - `assets/` has the corner pictures, uploaded to the Discord app as `juice`, `juice_mid` (in use) and `juice_wide`.
 - Tests: `node --test test/core.test.js`.

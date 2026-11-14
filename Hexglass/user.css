@@ -1,0 +1,90 @@
+:root {
+  --hg-glass: rgba(12, 12, 18, 0.38);
+  --hg-edge: rgba(255, 255, 255, 0.08);
+  --hg-radius: 16px;
+}
+
+/* The cover wash behind everything (drawn by theme.js) */
+.hexglass-bg {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  z-index: -1;
+  opacity: 0;
+  transition: opacity 0.8s ease;
+  pointer-events: none;
+}
+.hexglass-bg.on {
+  opacity: 1;
+}
+html.liteify-lite .hexglass-bg,
+html.liteify-away .hexglass-bg {
+  transition: none;
+}
+/* The dark base sits on html: Spotify colours html, which stops body's background passing down below the wash */
+html {
+  background: #0b0b10 !important;
+}
+body {
+  background: transparent !important;
+}
+.Root__top-container {
+  background: radial-gradient(120% 90% at 50% 0%, rgba(0, 0, 0, 0.05), rgba(0, 0, 0, 0.45)) !important;
+}
+
+/* Glass panels */
+.Root__nav-bar,
+.Root__main-view,
+.Root__right-sidebar-peek {
+  background: var(--hg-glass) !important;
+  border: 1px solid var(--hg-edge);
+  border-radius: var(--hg-radius) !important;
+  overflow: hidden;
+  --background-base: transparent;
+  --background-highlight: rgba(255, 255, 255, 0.07);
+  --background-press: rgba(255, 255, 255, 0.04);
+  --background-tinted-base: rgba(255, 255, 255, 0.07);
+  --background-tinted-highlight: rgba(255, 255, 255, 0.12);
+  --background-tinted-press: rgba(255, 255, 255, 0.05);
+}
+.Root__globalNav,
+.Root__now-playing-bar,
+.main-yourLibraryX-library,
+.YourLibraryX,
+.Root__right-sidebar aside,
+.main-home-filterChipsSection {
+  background: transparent !important;
+}
+.main-home-homeHeader {
+  background: none !important;
+}
+
+/* Rows and tiles: soft glass instead of flat grey */
+.view-homeShortcutsGrid-shortcut {
+  background: rgba(255, 255, 255, 0.06) !important;
+  border: 1px solid var(--hg-edge);
+  border-radius: 10px !important;
+  overflow: hidden;
+}
+.view-homeShortcutsGrid-shortcut:hover {
+  background: rgba(255, 255, 255, 0.12) !important;
+}
+.main-cardImage-imageWrapper,
+.main-cardImage-image {
+  border-radius: 10px !important;
+}
+
+/* Calmer home: fewer words, more room */
+section[data-testid="component-shelf"] p[data-encore-id="listRowTitle"],
+[data-encore-id="card"][aria-labelledby*=":playlist:"] [id^="card-subtitle-"] {
+  display: none !important;
+}
+section[data-testid="component-shelf"][aria-label*="episode" i],
+section[data-testid="component-shelf"][aria-label*="podcast" i],
+section[data-testid="component-shelf"][aria-label*="audiobook" i] {
+  display: none !important;
+}
+section[data-testid="home-page"] section[data-testid="component-shelf"] {
+  margin-block: 12px 20px;
+}
