@@ -20,6 +20,7 @@ can break any of them.
   top of a playlist, and every local song gets lyrics.
 - **[LocalPresence](LocalPresence/README.md)** gives local files a proper Discord status with the real cover,
   instead of Spotify's grey "?".
+- **[SiteNow](SiteNow/README.md)** shows what I'm playing on Spotify on my website, live, local files included.
 
 `tools/` has the scripts I use while building these (running code inside Spotify, catching errors, screenshots).
 
