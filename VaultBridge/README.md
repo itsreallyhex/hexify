@@ -15,12 +15,17 @@ with lyrics, without me doing anything.
   nothing.
 - **Lyrics for local files.** Instead of "No lyrics for local files", every local song gets lyrics in Spicy Lyrics.
   It tries, in order:
-  1. timed lyrics from [LRCLIB](https://lrclib.net), which scroll with the song
-  2. plain lyrics from LRCLIB
-  3. plain lyrics from [juicewrldapi.com](https://juicewrldapi.com), which has most unreleased songs
+  1. timed lyrics from [juicewrldapi.com](https://juicewrldapi.com) for Juice WRLD songs, for the exact version
+     (v1, v2...) and only when its length matches your file, so unreleased songs scroll with the song too
+  2. timed lyrics from [LRCLIB](https://lrclib.net)
+  3. plain lyrics from LRCLIB
+  4. plain lyrics from juicewrldapi.com, which is also what a long session take gets when only the shorter song's
+     lyrics exist (the timing wouldn't fit)
 
-  Lyrics you added to Spicy Lyrics yourself are never replaced. Songs with no lyrics anywhere get another try after
-  two weeks.
+  juicewrldapi.com is the one I trust most, so its timed lyrics replace anything, even lyrics you uploaded to Spicy
+  Lyrics yourself. Your upload is kept in Spotify's storage under `vaultbridge:replaced` in case you want it back.
+  The other sources never replace your uploads. Every song gets looked at again every two weeks, so new lyrics on
+  either site show up by themselves.
 
 ## Install
 

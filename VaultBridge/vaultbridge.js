@@ -1,8 +1,9 @@
 // VaultBridge: the Spotify half of 999 Vault's "Send to Spotify".
 //  1. New local files (999 Vault copies them into Spotify's local folder) go to the TOP of one playlist.
-//  2. Every local file gets lyrics in Spicy Lyrics: timed from LRCLIB when it has them, else plain from LRCLIB,
-//     else plain from juicewrldapi.com (which covers unreleased songs).
-//     Lyrics already in Spicy Lyrics (yours, uploaded by hand) are never overwritten.
+//  2. Every local file gets lyrics in Spicy Lyrics: timed from juicewrldapi.com (Juice WRLD, same version and length),
+//     else timed from LRCLIB, else plain from LRCLIB, else plain from juicewrldapi.com.
+//     juicewrldapi's timed lyrics replace anything, even your own uploads (kept in vaultbridge:replaced); the other
+//     sources only fill empty slots or replace what VaultBridge wrote. Each song is looked at again every 14 days.
 // The pure parts (core) are tested with (from VaultBridge/): node --test test/core.test.js
 
 var VaultBridgeCore = (() => {
@@ -58,29 +59,58 @@ var VaultBridgeCore = (() => {
     const off = r => (durationSec && r.duration ? Math.abs(r.duration - durationSec) : 0);
     const close = usable.filter(r => off(r) <= 10);
     close.sort((a, b) => (!!b.syncedLyrics - !!a.syncedLyrics) || off(a) - off(b));
-    return close[0] || null;
+    const best = close[0];
+    if (!best) return null;
+    // The same timestamps filed more often under a length far from this song: copied from another take, so words only.
+    // (One 331 s "Tales Of The Toxic" carries the timing of fifteen 156 s copies, which runs out halfway.)
+    const stamps = r => parseLrc(r.syncedLyrics).map(l => l.at).join(","); // copies differ in spelling, not timing
+    const twins = best.syncedLyrics ? usable.filter(r => r.syncedLyrics && r.duration && stamps(r) === stamps(best)) : [];
+    const copied = durationSec && twins.filter(r => Math.abs(r.duration - durationSec) > 10).length > twins.filter(r => Math.abs(r.duration - durationSec) <= 10).length;
+    return copied ? { ...best, syncedLyrics: null, plainLyrics: best.plainLyrics || parseLrc(best.syncedLyrics).map(l => l.text).join("\n") } : best;
   }
 
   // TTML for one LRCLIB record, timed when it can be.
   const ttmlFor = (rec, durationMs) => (rec?.syncedLyrics && lrcToTtml(rec.syncedLyrics, durationMs)) || (rec?.plainLyrics && plainToTtml(rec.plainLyrics)) || null;
 
-  // juicewrldapi.com fallback (plain lyrics for unreleased songs LRCLIB lacks): the entry whose name or other names
-  // match the title once versions, features and punctuation are stripped. Same matching as 999 Vault's album lookup.
+  // juicewrldapi.com record for a title: the entry whose name or other names match once versions, features and
+  // punctuation are stripped (same matching as 999 Vault's album lookup). Only the same version when the vault has
+  // it, since each version has its own timing; timed lyrics (synced_lyrics) beat plain ones.
   const nameKey = s => searchTitle(s).toLowerCase().replace(/[^a-z0-9]/g, "");
   const version = s => (String(s || "").match(/[[(]v(\d+(?:\.\d+)?)[\])]/i) || [])[1] || "";
-  function pickJwLyrics(results, title) {
+  const has = s => !!String(s || "").trim();
+  // "3:04" or "1:02:03" -> seconds; 0 when unknown.
+  const lengthSec = s => (/^\d+(:\d{1,2})+$/.test(String(s || "").trim()) ? String(s).trim().split(":").reduce((a, n) => a * 60 + Number(n), 0) : 0);
+  // An entry fits the song when its listed length is within 10 s, or unknown. Otherwise it's another take (a 5:32
+  // session vs the 2:35 song): its words may still help, its timing won't.
+  const jwFits = (r, sec) => !sec || !lengthSec(r?.length) || Math.abs(lengthSec(r.length) - sec) <= 10;
+  function pickJw(results, title, sec = 0) {
     const want = nameKey(title);
     if (want.length < 3) return null;
-    const hits = (results || []).filter(r => (r.lyrics || "").trim() && [r.name, ...(r.track_titles || [])].some(n => nameKey(n) === want));
-    const same = hits.find(r => version(r.name) && version(r.name) === version(title));
-    return (same || hits[0])?.lyrics || null;
+    const hits = (results || []).filter(r => (has(r.lyrics) || has(r.synced_lyrics)) && [r.name, ...(r.track_titles || [])].some(n => nameKey(n) === want));
+    const same = hits.filter(r => version(r.name) && version(r.name) === version(title));
+    const pool = same.length ? same : hits;
+    const rank = r => (jwFits(r, sec) ? 0 : 2) + (has(r.synced_lyrics) ? 0 : 1);
+    return [...pool].sort((a, b) => rank(a) - rank(b))[0] || null;
+  }
+  // An entry's words without timing, from its plain text or else its timed one.
+  const jwPlain = r => (r ? r.lyrics || parseLrc(r.synced_lyrics).map(l => l.text).join("\n") : "");
+
+  // Lyrics VaultBridge wrote itself (exactly our header). Anything else in the store is someone's own upload.
+  const OUR_HEAD = doc("None", "").split("itunes:timing=")[0];
+  const ours = ttml => typeof ttml === "string" && ttml.startsWith(OUR_HEAD);
+
+  // What to store for a song, or null to leave it. juicewrldapi's fitting timed lyrics replace anything, even your own
+  // uploads (the most trusted source); the best other lyrics only fill an empty slot or replace VaultBridge's own.
+  function choose(current, jwTimed, other) {
+    const next = jwTimed || (current == null || ours(current) ? other : null);
+    return next && next !== current ? next : null;
   }
 
   // Local tracks not seen before, newest first (so the newest lands at the very top).
   const newTracks = (tracks, known) =>
     tracks.filter(t => t.uri && !known.has(t.uri)).sort((a, b) => Date.parse(b.addedAt || 0) - Date.parse(a.addedAt || 0));
 
-  return { parseLrc, lrcToTtml, plainToTtml, searchTitle, pickLyrics, pickJwLyrics, ttmlFor, newTracks, clock };
+  return { parseLrc, lrcToTtml, plainToTtml, searchTitle, pickLyrics, pickJw, jwFits, jwPlain, lengthSec, ours, choose, ttmlFor, newTracks, clock };
 })();
 if (typeof module !== "undefined") module.exports = VaultBridgeCore;
 
@@ -92,8 +122,10 @@ if (typeof module !== "undefined") module.exports = VaultBridgeCore;
 
   const TARGET = "spotify:playlist:1yc0GaeanK6F5n7poZs3gR"; // "idk", where new songs go (top)
   const KNOWN = "vaultbridge:known";    // local URIs already seen
-  const MISSED = "vaultbridge:nolyrics"; // URI -> when LRCLIB last had nothing
+  const CHECKED = "vaultbridge:checked2";  // URI -> when its lyrics were last looked up; renamed when the rules change, so every song is redone once
+  const REPLACED = "vaultbridge:replaced"; // URI -> your own upload that juicewrldapi replaced, to put back by hand
   const RETRY_MS = 14 * 86400000;
+  ["vaultbridge:nolyrics", "vaultbridge:nolyrics2", "vaultbridge:checked"].forEach(k => S.LocalStorage.remove?.(k)); // older keys
   const LRCLIB = "https://lrclib.net/api";
   const log = (...a) => console.log("[vaultbridge]", ...a);
   const readJson = (k, d) => { try { return JSON.parse(S.LocalStorage.get(k) || "null") ?? d; } catch { return d; } };
@@ -129,30 +161,29 @@ if (typeof module !== "undefined") module.exports = VaultBridgeCore;
     const db = await new Promise((ok, bad) => { const r = indexedDB.open("spicylyrics"); r.onsuccess = () => ok(r.result); r.onerror = () => bad(r.error); });
     if (!db.objectStoreNames.contains("lyricsStore")) { db.close(); return null; }
     const req = (mode, fn) => new Promise((ok, bad) => { const r = fn(db.transaction("lyricsStore", mode).objectStore("lyricsStore")); r.onsuccess = () => ok(r.result); r.onerror = () => bad(r.error); });
-    return { keys: () => req("readonly", s => s.getAllKeys()), put: (uri, ttml) => req("readwrite", s => s.put(ttml, uri)), close: () => db.close() };
+    return {
+      all: () => Promise.all([req("readonly", s => s.getAllKeys()), req("readonly", s => s.getAll())]), // same key order
+      put: (uri, ttml) => req("readwrite", s => s.put(ttml, uri)),
+      close: () => db.close(),
+    };
   }
 
+  // Both lookups throw when the site can't be reached, so a song is never re-judged (and downgraded) on a failed one.
   async function lrclib(t) {
     const title = t.name, artist = t.artists?.[0]?.name || "", sec = Math.round((t.duration?.milliseconds || 0) / 1000);
     const q = new URLSearchParams({ track_name: title, artist_name: artist, album_name: t.album?.name || "", duration: String(sec) });
-    try {
-      const r = await fetch(`${LRCLIB}/get?${q}`);
-      if (r.ok) { const rec = await r.json(); if (C.pickLyrics([rec], sec)) return rec; }
-    } catch {}
-    const s = new URLSearchParams({ track_name: C.searchTitle(title), artist_name: artist });
-    try {
-      const r = await fetch(`${LRCLIB}/search?${s}`);
-      if (r.ok) return C.pickLyrics(await r.json(), sec);
-    } catch {}
-    return null;
+    const g = await fetch(`${LRCLIB}/get?${q}`); // a miss here is normal (404); the search below decides
+    if (g.ok) { const rec = await g.json(); if (C.pickLyrics([rec], sec)) return rec; }
+    const s = await fetch(`${LRCLIB}/search?${new URLSearchParams({ track_name: C.searchTitle(title), artist_name: artist })}`);
+    if (!s.ok) throw new Error(`lrclib ${s.status}`);
+    return C.pickLyrics(await s.json(), sec);
   }
 
-  async function jwLyrics(t) {
-    try {
-      const r = await fetch(`https://juicewrldapi.com/juicewrld/songs/?search=${encodeURIComponent(C.searchTitle(t.name))}`);
-      if (r.ok) return C.pickJwLyrics((await r.json()).results, t.name);
-    } catch {}
-    return null;
+  async function jwRecord(t, sec) {
+    if (!t.artists?.some(a => /juice wrld/i.test(a.name || ""))) return null; // another artist's song of the same name
+    const r = await fetch(`https://juicewrldapi.com/juicewrld/songs/?search=${encodeURIComponent(C.searchTitle(t.name))}`);
+    if (!r.ok) throw new Error(`juicewrldapi ${r.status}`);
+    return C.pickJw((await r.json()).results, t.name, sec);
   }
 
   let lyricsRunning = false;
@@ -163,20 +194,35 @@ if (typeof module !== "undefined") module.exports = VaultBridgeCore;
     try {
       store = await lyricsStore();
       if (!store) return;
-      const have = new Set(await store.keys());
-      const missed = readJson(MISSED, {});
-      const todo = tracks.filter(t => !have.has(t.uri) && !(missed[t.uri] > Date.now() - RETRY_MS));
-      let added = 0;
+      const [keys, values] = await store.all();
+      const saved = new Map(keys.map((k, i) => [k, values[i]]));
+      const checked = readJson(CHECKED, {});
+      const replaced = readJson(REPLACED, {});
+      const todo = tracks.filter(t => !(checked[t.uri] > Date.now() - RETRY_MS));
+      let changed = 0;
       for (const t of todo) {
-        const rec = await lrclib(t);
-        let ttml = C.ttmlFor(rec, t.duration?.milliseconds || 0);
-        if (!ttml) ttml = C.plainToTtml(await jwLyrics(t)); // unreleased songs: plain lyrics from juicewrldapi.com
-        if (ttml) { await store.put(t.uri, ttml); added++; delete missed[t.uri]; }
-        else missed[t.uri] = Date.now();
-        S.LocalStorage.set(MISSED, JSON.stringify(missed));
+        const ms = t.duration?.milliseconds || 0, sec = Math.round(ms / 1000);
+        let next;
+        try {
+          const jw = await jwRecord(t, sec);
+          const jwTimed = jw?.synced_lyrics && C.jwFits(jw, sec) ? C.lrcToTtml(jw.synced_lyrics, ms) : null;
+          const other = jwTimed ? null : C.ttmlFor(await lrclib(t), ms) || C.plainToTtml(C.jwPlain(jw));
+          next = C.choose(saved.get(t.uri), jwTimed, other);
+        } catch (e) {
+          log("lookup failed, trying again later:", t.name, e.message);
+          break; // offline or rate-limited: the rest waits for the next round
+        }
+        const cur = saved.get(t.uri);
+        if (next) {
+          if (cur != null && !C.ours(cur)) { replaced[t.uri] = cur; S.LocalStorage.set(REPLACED, JSON.stringify(replaced)); }
+          await store.put(t.uri, next);
+          changed++;
+        }
+        checked[t.uri] = Date.now();
+        S.LocalStorage.set(CHECKED, JSON.stringify(checked));
         await sleep(400); // be gentle with LRCLIB
       }
-      if (added) log(`lyrics added for ${added} local song(s)`);
+      if (changed) log(`lyrics saved for ${changed} local song(s)`);
     } catch (e) {
       console.error("[vaultbridge] lyrics", e);
     } finally {
