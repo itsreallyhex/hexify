@@ -37,7 +37,11 @@ var HexedMeta = window.HexedMeta = window.HexedMeta || (() => {
           const t = r?.data?.trackUnion;
           if (!t) return null;
           const ar = t.firstArtist?.items?.[0];
-          return { cover: pick(t.albumOfTrack?.coverArt?.sources), album: t.albumOfTrack?.uri, artist: ar?.uri, photo: pick(ar?.visuals?.avatarImage?.sources) };
+          const covers = t.albumOfTrack?.coverArt?.sources, photos = ar?.visuals?.avatarImage?.sources;
+          return {
+            cover: pick(covers), album: t.albumOfTrack?.uri, artist: ar?.uri, photo: pick(photos), ms: t.duration?.totalMilliseconds,
+            coverBig: pick(covers, 1000), photoBig: pick(photos, 1000), // largest Spotify has, for full-screen use
+          };
         })
         .catch(() => null));
     }
@@ -50,7 +54,7 @@ var HexedMeta = window.HexedMeta = window.HexedMeta || (() => {
 function hexedAccent(url) {
   return new Promise(ok => {
     const img = new Image();
-    img.crossOrigin = "anonymous";
+    if (url.startsWith("https:")) img.crossOrigin = "anonymous"; // local covers (spotify:localfileimage:) only load without it
     img.onerror = () => ok(null);
     img.onload = () => {
       try {
@@ -115,6 +119,7 @@ function HexedApp() {
   const [hero, setHero] = R.useState(null); // { photo, cover, artist }
   const [accent, setAccent] = R.useState(null);
   const [hover, setHover] = R.useState(null); // index of the graph point under the mouse
+  const [story, setStory] = R.useState(false);
   const fileRef = R.useRef(null);
 
   const load = () => HexedStore.all().then(setRecs).catch(e => setMsg("Couldn't read your data: " + e.message));
@@ -276,7 +281,10 @@ function HexedApp() {
     Object.entries(RANGES).map(([k, [l]]) => h("button", { key: k, role: "tab", "aria-selected": k === range, className: "hx-chip" + (k === range ? " on" : ""), onClick: () => setRange(k) }, l)),
     range === "custom" && h("span", { className: "hx-custom" },
       h("input", { type: "date", "aria-label": "From", value: custom.from, onChange: e => setCustom({ ...custom, from: e.target.value }) }), " to ",
-      h("input", { type: "date", "aria-label": "To", value: custom.to, onChange: e => setCustom({ ...custom, to: e.target.value }) })));
+      h("input", { type: "date", "aria-label": "To", value: custom.to, onChange: e => setCustom({ ...custom, to: e.target.value }) })),
+    h("button", { className: "hx-btn hx-wrap", disabled: !st || st.plays < 30, title: st?.plays < 30 ? "Needs at least 30 plays in this range" : undefined, onClick: () => setStory(true) },
+      h("svg", { viewBox: "0 0 24 24", width: 16, height: 16, fill: "currentColor", "aria-hidden": true }, h("path", { d: "M8 5v14l11-7z" })), "Play my Wrapped"));
+  const storyLabel = range === "custom" ? [custom.from, custom.to].filter(Boolean).map(hsDay).join(" – ") || "All time" : label;
 
   let body;
   if (!st) {
@@ -326,6 +334,7 @@ function HexedApp() {
       h("p", { className: "hx-sub" }, `You've been Hexed: ${label}`),
       chips),
     body,
+    story && st && h(HexedStory, { recs, from, to, st, prev, label: storyLabel, prevLabel, accent, onClose: () => setStory(false) }),
     h("details", { className: "hx-data" },
       h("summary", null, `Your data · ${recs ? fmt(recs.length) : "…"} streams saved on this PC · ${backupTxt}`),
       h("p", { className: "hx-muted" }, "Import your Spotify history: unzip the email from Spotify and pick every Streaming_History_Audio_*.json (or StreamingHistory_music_*.json) file. Hexed backups load the same way. Importing twice never double counts."),
@@ -346,6 +355,7 @@ var HEXED_CSS = `
 .hx-chip{border:0;border-radius:999px;padding:7px 16px;background:var(--hx-card);font-weight:600;transition:background-color .15s,color .15s}
 .hx-chip:hover{background:rgba(255,255,255,.14)}
 .hx-chip.on{background:var(--hx-accent);color:#000}
+.hx-wrap{margin:0 0 0 auto;display:inline-flex;gap:8px;align-items:center}
 .hx-custom input{background:var(--hx-card);color:var(--spice-text);border:0;border-radius:8px;padding:5px 8px;color-scheme:dark}
 .hx-bento{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));grid-auto-rows:minmax(140px,auto);gap:14px}
 .hx-card{background:var(--hx-card);border:1px solid var(--hx-line);border-radius:20px;padding:20px;position:relative;overflow:hidden;text-align:left}

@@ -15,7 +15,8 @@ can break any of them.
 - **[Hexglass](Hexglass/README.md)** is my own Spotify look: the song's cover glows behind glass panels, and a small
   app puts the song and its lyrics on my desktop.
 - **[Hexed](Hexed/README.md)** is my own Spotify Wrapped that I can open any day: real play counts, any date range,
-  and my full listening history imported from Spotify.
+  and my full listening history imported from Spotify. It also plays it back as a Wrapped-style story, a song on
+  every slide, that I can save as pictures.
 - **[VaultBridge](VaultBridge/README.md)** works with my other app, 999 Vault. Songs it sends to Spotify land at the
   top of a playlist, and every local song gets lyrics.
 - **[LocalPresence](LocalPresence/README.md)** gives local files a proper Discord status with the real cover,

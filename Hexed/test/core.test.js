@@ -152,6 +152,63 @@ test("insights: comparison, top artist share, obsession, night owl", () => {
   assert.deepEqual(C.insights(C.stats([]), null, null), []);
 });
 
+test("wrapped: first song, artist songs, local share, discoveries, days and time of day", () => {
+  const at = (d, h) => new Date(2026, 2, d, h).getTime();
+  const r = (s, u, n, a = "Juice WRLD", al = "Alb") => ({ s, ms: 60000, u, n, a, al, src: "live" });
+  const L = "spotify:local:Juice+WRLD:Alb:Leak:120";
+  const recs = [
+    r(at(1, 9), "spotify:track:OLD", "Old"),          // before the range: not a discovery
+    r(at(10, 9), "spotify:track:OLD", "Old"),         // first play in range (morning)
+    ...[0, 1, 2].map(i => r(at(11, 23) + i, L, "Leak")), // night, local, new
+    r(at(12, 15), "spotify:track:X", "X", "Other"),   // afternoon
+    { s: at(12, 16), ms: 1000, u: "spotify:track:X", n: "X", a: "Other", al: "", src: "live" }, // a skip, ignored
+  ];
+  const from = at(5, 0), to = at(20, 0);
+  const w = C.wrapped(recs, from, to, C.stats(recs, from, to), to);
+  assert.equal(w.first.n, "Old");
+  assert.equal(w.localShare, 3 / 5);
+  assert.equal(w.localSongs[0].n, "Leak");
+  assert.deepEqual(w.discoveries.map(s => s.n), ["Leak"]);
+  assert.deepEqual([w.artists[0].a, w.artists[0].songs, w.artists[0].top[0].n], ["Juice WRLD", 2, "Leak"]);
+  assert.equal(w.album.top[0].n, "Leak");
+  assert.deepEqual(w.audioDay.map(b => b.top?.n ?? null), ["Old", "X", null, "Leak"]);
+  assert.equal(w.peakHour, 23);
+  assert.deepEqual(w.topDays.map(d => d.day), ["2026-03-11", "2026-03-10", "2026-03-12"]);
+  assert.deepEqual([w.daysListened, w.daysInRange], [3, 15]);
+  assert.equal(w.firstPlay.get(L), at(11, 23));
+  assert.deepEqual([w.race.unit, w.race.frames.length], ["week", 3]); // 15 days: weekly race
+  assert.equal(C.wrapped(recs, -Infinity, Infinity, C.stats(recs)).discoveries, null); // nothing earlier to compare with
+});
+
+test("wrapped: a rolling 15-day window counts 15 days, not the 16 dates it touches", () => {
+  const from = new Date(2026, 2, 5, 10).getTime(), to = new Date(2026, 2, 20, 10).getTime();
+  const recs = Array.from({ length: 16 }, (_, i) => ({ s: from + i * 86400000 - 3600000 * (i === 15 ? 2 : 0), ms: 60000, u: "x", n: "S", a: "A", al: "", src: "live" }));
+  const w = C.wrapped(recs, from, to, C.stats(recs, from, to), to);
+  assert.deepEqual([w.daysInRange, w.daysListened], [15, 15]);
+});
+
+test("wrapped race: monthly running totals, top 5 per frame", () => {
+  const m = (mo, a, n = 1) => Array.from({ length: n }, (_, i) => ({ s: new Date(2026, mo, 10, 12, i).getTime(), ms: 60000, u: a, n: a, a, al: "", src: "live" }));
+  const recs = [...m(0, "A", 3), ...m(1, "B", 5), ...m(2, "C", 1), ...m(3, "B", 1)];
+  const from = new Date(2026, 0, 1).getTime(), to = new Date(2026, 4, 1).getTime();
+  const w = C.wrapped(recs, from, to, C.stats(recs, from, to), to);
+  assert.equal(w.race.unit, "month");
+  assert.equal(w.race.frames.length, 4);
+  assert.deepEqual(w.race.frames[0].top.map(x => x.a), ["A"]);
+  assert.deepEqual(w.race.frames[1].top.map(x => [x.a, x.ms / 60000]), [["B", 5], ["A", 3]]);
+  assert.deepEqual(w.race.frames[3].top.map(x => [x.a, x.ms / 60000]), [["B", 6], ["A", 3], ["C", 1]]);
+  const wk = to - 7 * 86400000;
+  assert.equal(C.wrapped(recs, wk, to, C.stats(recs, wk, to), to), null); // no plays in the last week
+});
+
+test("personality: strongest habit wins, weak signals give the all-rounder", () => {
+  const st = o => ({ ms: 100, plays: 100, uniqueSongs: 50, uniqueArtists: 5, hours: new Array(24).fill(100 / 24), topArtists: [{ a: "Juice WRLD", ms: 20 }], ...o });
+  assert.equal(C.personality(st(), 0.6).name, "The Vault Digger");
+  assert.equal(C.personality(st({ topArtists: [{ a: "Juice WRLD", ms: 70 }] }), 0).name, "The Loyalist");
+  assert.equal(C.personality(st({ uniqueSongs: 4 }), 0).name, "The Replayer");
+  assert.equal(C.personality(st(), 0).name, "The All-Rounder");
+});
+
 test("stats: range filter, top songs, streak", () => {
   const day = d => Date.parse(`2026-03-0${d}T15:00:00`);
   const r = (d, u) => ({ s: day(d), ms: 60000, u, n: u, a: "Art", al: "Alb", src: "live" });

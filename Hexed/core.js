@@ -183,6 +183,99 @@ var HexedCore = globalThis.HexedCore = (() => {
     return out;
   }
 
+  const blockOf = h => (h < 5 ? 3 : h < 12 ? 0 : h < 17 ? 1 : h < 22 ? 2 : 3); // morning, afternoon, evening, night
+  const group = (m, k) => m.get(k) || m.set(k, new Map()).get(k);
+  const ranked = m => (m ? [...m.values()].sort((x, y) => y.plays - x.plays || y.ms - x.ms) : []);
+
+  // Race buckets: months for 60+ days (merged so there are at most 24), weeks for 14+ days, else none.
+  function raceBounds(start, end) {
+    const days = (end - start) / 86400000;
+    if (!(days >= 14)) return null;
+    const d = new Date(start), e = new Date(end - 1), out = [];
+    const monthly = days >= 60;
+    const step = monthly ? Math.ceil(((e.getFullYear() - d.getFullYear()) * 12 + e.getMonth() - d.getMonth() + 1) / 24) : 7;
+    for (let i = 0; ; i += step) {
+      const t = monthly ? new Date(d.getFullYear(), d.getMonth() + i, 1).getTime() : new Date(d.getFullYear(), d.getMonth(), d.getDate() + i).getTime();
+      if (t >= end) break;
+      out.push(i === 0 ? start : t);
+    }
+    return { unit: monthly ? "month" : "week", bounds: out };
+  }
+
+  // Extra numbers for the Wrapped story. `st` = stats() for the same range.
+  function wrapped(records, from, to, st, now = Date.now()) {
+    if (!st.plays) return null;
+    const key = keyer(records);
+    const start = Number.isFinite(from) ? from : st.first, end = Math.min(Number.isFinite(to) ? to : now + 1, now + 1);
+    const race = raceBounds(start, end), raceMs = race ? race.bounds.map(() => new Map()) : [], names = new Map();
+    const before = new Set(), songs = new Map(), firstPlay = new Map(), byArtist = new Map(), byAlbum = new Map(), local = new Map(), byDay = new Map();
+    const blocks = [0, 1, 2, 3].map(() => new Map()), blockMs = [0, 0, 0, 0];
+    let first = null, localMs = 0;
+    for (const r of records) {
+      if (!isPlay(r)) continue;
+      const k = key(r);
+      if (r.s < from) { before.add(k); continue; }
+      if (r.s >= to) continue;
+      const song = () => ({ n: r.n, a: r.a, u: r.u, k });
+      if (!first || r.s < first.s) first = { ...song(), s: r.s };
+      if (!(firstPlay.get(k) <= r.s)) firstPlay.set(k, r.s);
+      bump(songs, k, r.ms, song);
+      if (r.a) bump(group(byArtist, r.a.toLowerCase()), k, r.ms, song);
+      if (r.al) bump(group(byAlbum, `${r.al}|${r.a}`.toLowerCase()), k, r.ms, song);
+      if (r.u?.startsWith("spotify:local:")) { localMs += r.ms; bump(local, k, r.ms, song); }
+      const b = blockOf(new Date(r.s).getHours());
+      blockMs[b] += r.ms;
+      bump(blocks[b], k, r.ms, song);
+      bump(group(byDay, dayStr(r.s)), k, r.ms, song);
+      if (race && r.a) {
+        const a = r.a.toLowerCase(), m = raceMs[Math.max(0, lowerBound(race.bounds, r.s + 1) - 1)];
+        m.set(a, (m.get(a) || 0) + r.ms);
+        if (!names.has(a)) names.set(a, r.a);
+      }
+    }
+    // Running totals per bucket, top 5 each: the "sprint" to the #1 spot.
+    let frames = null;
+    if (race) {
+      const total = new Map();
+      frames = race.bounds.map((t, i) => {
+        for (const [a, ms] of raceMs[i]) total.set(a, (total.get(a) || 0) + ms);
+        return { t, top: [...total].sort((x, y) => y[1] - x[1]).slice(0, 5).map(([a, ms]) => ({ a: names.get(a), ms })) };
+      });
+    }
+    const localShare = localMs / st.ms;
+    const out = {
+      first, firstPlay, localShare, localSongs: ranked(local).slice(0, 5), localCount: local.size,
+      discoveries: before.size ? ranked(songs).filter(s => !before.has(s.k) && s.plays >= 3).slice(0, 3) : null,
+      artists: st.topArtists.slice(0, 5).map(a => { const m = byArtist.get(a.a.toLowerCase()); return { ...a, songs: m ? m.size : 0, top: ranked(m).slice(0, 3) }; }),
+      album: st.topAlbums[0] ? { ...st.topAlbums[0], top: ranked(byAlbum.get(`${st.topAlbums[0].al}|${st.topAlbums[0].a}`.toLowerCase())).slice(0, 3) } : null,
+      audioDay: blocks.map((m, i) => ({ ms: blockMs[i], top: ranked(m)[0] || null })),
+      peakHour: st.hours.indexOf(Math.max(...st.hours)),
+      topDays: [...byDay].map(([day, m]) => ({ day, ms: st.days.get(day), top: ranked(m)[0] })).sort((x, y) => y.ms - x.ms).slice(0, 3),
+      // A rolling "last 30 days" touches 31 dates (partial first day and today): count the real length instead.
+      daysInRange: Math.min(calendarDays(start, end).length, Math.ceil((end - start) / 86400000 - 1e-6)),
+      race: frames && frames.length >= 3 ? { unit: race.unit, frames } : null,
+    };
+    out.daysListened = Math.min(st.days.size, out.daysInRange);
+    out.personality = personality(st, localShare);
+    return out;
+  }
+
+  // Strongest listening habit wins; nothing above 30% means a bit of everything.
+  function personality(st, localShare) {
+    const pct = x => Math.round(x * 100), top = st.topArtists[0];
+    const night = [22, 23, 0, 1, 2, 3, 4].reduce((s, h) => s + st.hours[h], 0) / st.ms;
+    const topShare = top ? top.ms / st.ms : 0, perSong = st.plays / Math.max(1, st.uniqueSongs);
+    const types = [
+      { name: "The Vault Digger", score: localShare, line: `${pct(localShare)}% of your listening was your own files: sessions, leaks and edits.` },
+      { name: "The Loyalist", score: topShare, line: `${top?.a} was ${pct(topShare)}% of everything you played.` },
+      { name: "The Night Shift", score: night, line: `${pct(night)}% of your listening happened between 10 PM and 5 AM.` },
+      { name: "The Replayer", score: Math.min(1, perSong / 20), line: `You played each song ${perSong.toFixed(1)} times on average.` },
+      { name: "The Explorer", score: Math.min(1, (st.uniqueArtists / st.plays) * 4), line: `${st.uniqueArtists} different artists in ${st.plays} plays.` },
+    ];
+    const best = types.reduce((a, b) => (b.score > a.score ? b : a));
+    return best.score >= 0.3 ? best : { name: "The All-Rounder", score: 0, line: "A bit of everything: no artist, hour or song ran the show." };
+  }
+
   function bump(map, k, ms, make) {
     let v = map.get(k);
     if (!v) map.set(k, (v = Object.assign(make(), { plays: 0, ms: 0 })));
@@ -203,6 +296,6 @@ var HexedCore = globalThis.HexedCore = (() => {
     return best;
   }
 
-  return { PLAY_MS, isPlay, shouldResume, nameKey, parseExport, merge, counts, stats, prevRange, delta, newArtists, insights, longestStreak, dayStr, calendarDays, dateOpts };
+  return { PLAY_MS, isPlay, shouldResume, nameKey, parseExport, merge, counts, stats, prevRange, delta, newArtists, insights, longestStreak, dayStr, calendarDays, dateOpts, wrapped, personality };
 })();
 if (typeof module !== "undefined") module.exports = HexedCore;

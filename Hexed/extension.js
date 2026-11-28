@@ -18,7 +18,7 @@
   function begin() {
     const it = S.Player.data?.item;
     const u = it?.uri || "";
-    if (!/^spotify:(track|local):/.test(u)) { cur = null; return; } // skip podcasts and ads
+    if (!/^spotify:(track|local):/.test(u) || window.hexedStoryOpen) { cur = null; return; } // skip podcasts, ads and Wrapped story previews
     lastPos = S.Player.getProgress() || 0;
     cur = { s: Date.now() - lastPos, ms: 0, u, n: it.name || "", a: it.artists?.[0]?.name || "", al: it.album?.name || "", src: "live" };
   }
